@@ -57,6 +57,7 @@ module Vycap
       vrun sudo_cmds
     end
 
+    # borrowed from http://www.codedrop.ca/blog/archives/200
     def _colorize(text, color_code)
       "#{color_code}#{text}\033[0m"
     end
