@@ -1,9 +1,12 @@
 Capistrano::Configuration.instance.load do
   set :vycap_template_dir, File.expand_path("./vycap/templates/")
-  set :vycap_user, "vyatta"
+  set :vycap_user, nil
   set :vycap_remote_config, "/config/config.vycap"
   set :vycap_tmp_dir, "/tmp"
   set :vycap_template, "config"
+  set :vycap_template_context, {}
+  set :vycap_auth_dir, ""
+  set :vycap_remote_auth_dir, "/config/auth/vycap/"
 
   namespace :vycap do
     task :download_config_template do
@@ -31,24 +34,78 @@ Capistrano::Configuration.instance.load do
       end
     end
 
-    task :upload_config do
-      failed_servers = roles[:vyatta].servers.map do |srv|
-        vycap_plugin.generate_config(srv, {
-          :template => vycap_template,
-          :template_dir => vycap_template_dir,
-          :output_dir => vycap_tmp_dir
-        })
-
-        remote_file = SupplyDrop::Rsync.remote_address(vycap_user, srv.host, vycap_remote_config)
-        cmd = SupplyDrop::Rsync.command(
-          File.join(vycap_tmp_dir, "config.#{srv}"),
-          remote_file,
-          :ssh => ssh_options
-        )
-        srv unless system cmd
+    namespace :upload do
+      task :default do
+        vycap.upload.config
+        vycap.upload.auth_files unless vycap_auth_dir == ""
       end
 
-      raise "rsync failed on #{failed_servers.inspect}" if failed_servers.any?
+      task :config do
+        failed_servers = roles[:vyatta].servers.map do |srv|
+          vycap_plugin.generate_config(srv, {
+            :template => vycap_template,
+            :template_dir => vycap_template_dir,
+            :output_dir => vycap_tmp_dir,
+            :context => vycap_template_context
+          })
+
+          remote_file = SupplyDrop::Rsync.remote_address(vycap_user, srv.host, vycap_remote_config)
+
+          cmd = SupplyDrop::Rsync.command(
+            File.join(vycap_tmp_dir, "config.#{srv}"),
+            remote_file,
+            :ssh => ssh_options
+          )
+          srv unless system cmd
+        end
+
+        raise "rsync failed on #{failed_servers.inspect}" if failed_servers.any?
+
+      end
+
+      task :upload_auth_files do
+        failed_servers = roles[:vyatta].servers.map do |srv|
+          remote_file = SupplyDrop::Rsync.remote_address(vycap_user, srv.host, vycap_remote_auth_dir)
+          auth_dir = vycap_auth_dir
+
+          remote_file += "/" unless remote_file =~ /\/$/
+          auth_dir += "/" unless auth_dir =~ /\/$/
+
+
+          cmd = SupplyDrop::Rsync.command(
+            auth_dir,
+            remote_file,
+            :ssh => ssh_options
+          )
+          srv unless system cmd
+        end
+
+        raise "rsync failed on #{failed_servers.inspect}" if failed_servers.any?
+      end
+    end
+
+    namespace :diff do
+      task :show do
+        set :user, vycap_user unless vycap_user.nil?
+        vycap_plugin.vrun(
+          "begin",
+          "load #{vycap_remote_config}",
+          'show | grep -C 3 -E "^[+->]"',
+          "discard",
+          "end"
+        )
+      end
+
+      task :apply do
+        set :user, vycap_user unless vycap_user.nil?
+        vycap_plugin.vrun(
+          "begin",
+          "load #{vycap_remote_config}",
+          "commit",
+          "save",
+          "end"
+        )
+      end
     end
   end
 end

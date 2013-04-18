@@ -14,11 +14,51 @@ module Vycap
       )
       template_filename += ".erb" unless template_filename =~ /\.erb$/
 
+      context = if options[:context].nil?
+                  OpenStruct.new
+                elsif options[:context].respond_to?(:call)
+                  OpenStruct.new(options[:context].call(server))
+                else
+                  OpenStruct.new(options[:context])
+                end
+
       erb = File.read(template_filename)
-      context = OpenStruct.new(options.fetch(:context, {}))
       File.open(output_filename, "w") do |out|
-        out.write ERB.new(erb).result(context.eval { binding })
+        out.write ERB.new(erb).result(context.instance_eval { binding })
       end
+    end
+
+    def vcmd(cmd)
+      "/opt/vyatta/sbin/vyatta-cfg-cmd-wrapper #{cmd}"
+    end
+
+    def vrun(*cmds)
+      cmds = cmds.flatten
+
+      vcmds = cmds.map do |cmd|
+        vcmd(cmd)
+      end
+
+      run %Q{#{vcmds.join(" && ")}}, :shell => "vbash", :eof => true do |ch, stream, data|
+        case stream
+        when :out
+          if data =~ /is not valid/ || data =~ /failed/
+            puts _colorize(data, "\033[31m")
+          else
+            puts data
+          end
+        when :err then warn "[err :: #{ch[:server]}] #{data}"
+        end
+      end
+    end
+
+    def vsudo(*cmds)
+      sudo_cmds = cmds.flatten.map {|cmd| "#{sudo} #{cmd}"}
+      vrun sudo_cmds
+    end
+
+    def _colorize(text, color_code)
+      "#{color_code}#{text}\033[0m"
     end
   end
 end
