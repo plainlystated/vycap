@@ -22,10 +22,29 @@ module Vycap
                   OpenStruct.new(options[:context])
                 end
 
+      context.partials = evaluate_partials(options.fetch(:partials_dir), context)
+
       erb = File.read(template_filename)
       File.open(output_filename, "w") do |out|
         out.write ERB.new(erb).result(context.instance_eval { binding })
       end
+    end
+
+    def evaluate_partials(partials_dir, context)
+      return @vycap_partials unless @vycap_partials.nil?
+
+      @vycap_partials = {}
+
+      Dir["#{partials_dir}/*.erb"].sort.each do |file|
+        erb = File.read(file)
+
+        @vycap_partials[File.basename(file, ".erb")] = ERB.new(erb).result(context.instance_eval { binding })
+      end
+
+      p @vycap_partials.keys
+
+
+      @vycap_partials
     end
 
     def vcmd(cmd)

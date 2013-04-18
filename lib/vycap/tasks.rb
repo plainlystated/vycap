@@ -1,5 +1,6 @@
 Capistrano::Configuration.instance.load do
   set :vycap_template_dir, File.expand_path("./vycap/templates/")
+  set :vycap_partials_dir, vycap_template_dir + "/partials"
   set :vycap_user, nil
   set :vycap_remote_config, "/config/config.vycap"
   set :vycap_tmp_dir, "/tmp"
@@ -45,6 +46,7 @@ Capistrano::Configuration.instance.load do
           vycap_plugin.generate_config(srv, {
             :template => vycap_template,
             :template_dir => vycap_template_dir,
+            :partials_dir => vycap_partials_dir,
             :output_dir => vycap_tmp_dir,
             :context => vycap_template_context
           })
@@ -63,7 +65,8 @@ Capistrano::Configuration.instance.load do
 
       end
 
-      task :upload_auth_files do
+      task :auth_files do
+        set :user, vycap_user unless vycap_user.nil?
         failed_servers = roles[:vyatta].servers.map do |srv|
           remote_file = SupplyDrop::Rsync.remote_address(vycap_user, srv.host, vycap_remote_auth_dir)
           auth_dir = vycap_auth_dir
@@ -77,7 +80,9 @@ Capistrano::Configuration.instance.load do
             remote_file,
             :ssh => ssh_options
           )
-          srv unless system cmd
+          success = system cmd
+          run("chmod 600 #{vycap_remote_auth_dir}/*")
+          srv unless success
         end
 
         raise "rsync failed on #{failed_servers.inspect}" if failed_servers.any?
