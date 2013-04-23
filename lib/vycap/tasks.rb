@@ -81,7 +81,7 @@ Capistrano::Configuration.instance.load do
             :ssh => ssh_options
           )
           success = system cmd
-          run("chmod 600 #{vycap_remote_auth_dir}/*")
+          run("chmod -R go-rw #{vycap_remote_auth_dir}")
           srv unless success
         end
 
@@ -92,7 +92,7 @@ Capistrano::Configuration.instance.load do
     namespace :diff do
       task :show do
         set :user, vycap_user unless vycap_user.nil?
-        vycap_plugin.vrun(
+        vycap_plugin.vsudo(
           "begin",
           "load #{vycap_remote_config}",
           'show | grep -C 3 -E "^[+->]"',
@@ -103,7 +103,7 @@ Capistrano::Configuration.instance.load do
 
       task :apply do
         set :user, vycap_user unless vycap_user.nil?
-        vycap_plugin.vrun(
+        vycap_plugin.vsudo(
           "begin",
           "load #{vycap_remote_config}",
           "commit",

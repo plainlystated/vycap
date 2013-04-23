@@ -41,9 +41,6 @@ module Vycap
         @vycap_partials[File.basename(file, ".erb")] = ERB.new(erb).result(context.instance_eval { binding })
       end
 
-      p @vycap_partials.keys
-
-
       @vycap_partials
     end
 
@@ -53,15 +50,25 @@ module Vycap
 
     def vrun(*cmds)
       cmds = cmds.flatten
+      if cmds.last.is_a?(Hash)
+        options = cmds.pop
+      else
+        options = {}
+      end
 
       vcmds = cmds.map do |cmd|
         vcmd(cmd)
       end
 
-      run %Q{#{vcmds.join(" && ")}}, :shell => "vbash", :eof => true do |ch, stream, data|
+      sudo_prefix = options.fetch(:sudo, false) ? sudo : ""
+
+      run %Q{#{sudo_prefix} vbash -c '#{vcmds.join(" && ")}'; true}, :eof => true, :shell => false do |ch, stream, data|
         case stream
         when :out
-          if data =~ /is not valid/ || data =~ /failed/
+          if data =~ /^enter .* password:$/i
+            password = Capistrano::CLI.password_prompt(data + " ")
+            ch.send_data(password + "\n")
+          elsif data =~ /is not valid/ || data =~ /failed/
             puts _colorize(data, "\033[31m")
           else
             puts data
@@ -72,8 +79,7 @@ module Vycap
     end
 
     def vsudo(*cmds)
-      sudo_cmds = cmds.flatten.map {|cmd| "#{sudo} #{cmd}"}
-      vrun sudo_cmds
+      vrun cmds, :sudo => true
     end
 
     # borrowed from http://www.codedrop.ca/blog/archives/200
