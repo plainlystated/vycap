@@ -1,7 +1,7 @@
 Capistrano::Configuration.instance.load do
   set :vycap_template_dir, File.expand_path("./vycap/templates/")
   set :vycap_partials_dir, vycap_template_dir + "/partials"
-  set :vycap_user, nil
+  set :vycap_user, "vyatta"
   set :vycap_remote_config, "/config/config.vycap"
   set :vycap_tmp_dir, "/tmp"
   set :vycap_template, "config"
